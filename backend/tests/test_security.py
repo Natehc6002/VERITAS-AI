@@ -1,5 +1,6 @@
 """Tests for stdlib password hashing and signed access tokens."""
 
+import base64
 import time
 
 import pytest
@@ -48,8 +49,14 @@ class TestTokens:
     def test_tampered_signature_rejected(self):
         token = create_access_token("user-abc", SECRET)
         version, body, signature = token.split(".")
-        flipped = "A" if signature[-1] != "A" else "B"
-        forged = f"{version}.{body}.{signature[:-1]}{flipped}"
+        # Flip a byte of the decoded signature (base64 padding bits are ignored
+        # on decode, so tamper at byte level for a deterministic mismatch).
+        raw = bytearray(
+            base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
+        )
+        raw[0] ^= 0xFF
+        forged_sig = base64.urlsafe_b64encode(bytes(raw)).decode("ascii").rstrip("=")
+        forged = f"{version}.{body}.{forged_sig}"
         with pytest.raises(TokenError):
             parse_access_token(forged, SECRET)
 

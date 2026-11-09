@@ -1,11 +1,11 @@
 """Investigation management endpoints (owner-scoped)."""
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 
 from app.api.deps import CurrentUser, DbSession
 from app.schemas.auth import InvestigationCreate, InvestigationResponse, InvestigationUpdate
 from app.schemas.document import MessageResponse
-from app.services import investigation_service
+from app.services import investigation_service, report_service
 
 router = APIRouter(prefix="/api/v1/investigations", tags=["investigations"])
 
@@ -65,6 +65,40 @@ def update_investigation(
         db, user, investigation_id, payload.name, payload.description
     )
     return InvestigationResponse.model_validate(item)
+
+
+@router.get(
+    "/{investigation_id}/report",
+    summary="Download forensic report (PDF)",
+    description=(
+        "Generate and download a PDF report for an owned investigation covering "
+        "investigation details, document information, extracted entities, forensic "
+        "findings with supporting evidence and source references, and the "
+        "cross-document comparison when two or more documents are in scope."
+    ),
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "The generated PDF report.",
+        },
+        401: {"description": "Missing or invalid access token."},
+        404: {"description": "Investigation not found."},
+    },
+)
+def download_report(
+    investigation_id: str, user: CurrentUser, db: DbSession
+) -> Response:
+    pdf_bytes, filename = report_service.build_investigation_report(
+        db, user, investigation_id
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(pdf_bytes)),
+        },
+    )
 
 
 @router.delete(
