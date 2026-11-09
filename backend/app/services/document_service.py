@@ -12,16 +12,30 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import DocumentNotFoundError, PdfProcessingError, StorageError
+from app.core.errors import (
+    DocumentNotFoundError,
+    InvestigationNotFoundError,
+    PdfProcessingError,
+    StorageError,
+)
 from app.models.document import Document, ProcessingStatus
+from app.models.user import Investigation, User
 from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.services import file_validation
 
 logger = logging.getLogger(__name__)
 
 
-def upload_document(db: Session, upload: UploadFile) -> Document:
-    """Validate, store and register a newly uploaded document."""
+def upload_document(
+    db: Session,
+    upload: UploadFile,
+    user: User,
+    investigation_id: str | None = None,
+) -> Document:
+    """Validate, store and register a newly uploaded document for ``user``."""
+    if investigation_id is not None:
+        _require_owned_investigation(db, user, investigation_id)
+
     settings = get_settings()
     extension = file_validation.validate_extension(upload.filename)
     expected_mime = file_validation.ALLOWED_EXTENSIONS[extension]
@@ -55,6 +69,8 @@ def upload_document(db: Session, upload: UploadFile) -> Document:
         processing_status=ProcessingStatus.COMPLETED.value,
         page_count=page_count,
         pdf_metadata=pdf_metadata,
+        owner_id=user.id,
+        investigation_id=investigation_id,
     )
 
     try:
@@ -72,12 +88,16 @@ def upload_document(db: Session, upload: UploadFile) -> Document:
 
 def list_documents(
     db: Session,
+    user: User,
     page: int,
     page_size: int,
     search: str | None,
+    investigation_id: str | None = None,
 ) -> DocumentListResponse:
-    """Return a paginated, newest-first document listing with optional filename search."""
-    stmt = select(Document)
+    """Return a paginated, newest-first listing scoped to ``user``."""
+    stmt = select(Document).where(Document.owner_id == user.id)
+    if investigation_id is not None:
+        stmt = stmt.where(Document.investigation_id == investigation_id)
     if search and search.strip():
         pattern = f"%{_escape_like(search.strip())}%"
         stmt = stmt.where(Document.original_filename.ilike(pattern, escape="\\"))
@@ -99,17 +119,17 @@ def list_documents(
     )
 
 
-def get_document(db: Session, document_id: str) -> Document:
-    """Return a single document or raise 404."""
-    document = _fetch_document(db, document_id)
+def get_document(db: Session, document_id: str, user: User) -> Document:
+    """Return a single owned document or raise 404 (also for foreign documents)."""
+    document = _fetch_document(db, document_id, user)
     if document is None:
         raise DocumentNotFoundError("Document not found.")
     return document
 
 
-def delete_document(db: Session, document_id: str) -> None:
-    """Remove a document's database record, intelligence rows and stored file."""
-    document = _fetch_document(db, document_id)
+def delete_document(db: Session, document_id: str, user: User) -> None:
+    """Remove an owned document's database record, intelligence rows and stored file."""
+    document = _fetch_document(db, document_id, user)
     if document is None:
         raise DocumentNotFoundError("Document not found.")
 
@@ -128,12 +148,27 @@ def delete_document(db: Session, document_id: str) -> None:
     _remove_stored_file(stored_filename)
 
 
-def _fetch_document(db: Session, document_id: str) -> Document | None:
+def _fetch_document(db: Session, document_id: str, user: User) -> Document | None:
     try:
         uuid.UUID(str(document_id))
     except (ValueError, TypeError, AttributeError):
         return None
-    return db.get(Document, str(document_id))
+    document = db.get(Document, str(document_id))
+    if document is None or document.owner_id != user.id:
+        return None
+    return document
+
+
+def _require_owned_investigation(db: Session, user: User, investigation_id: str) -> None:
+    from uuid import UUID
+
+    try:
+        UUID(str(investigation_id))
+    except (ValueError, TypeError, AttributeError):
+        raise InvestigationNotFoundError("Investigation not found.") from None
+    investigation = db.get(Investigation, str(investigation_id))
+    if investigation is None or investigation.owner_id != user.id:
+        raise InvestigationNotFoundError("Investigation not found.")
 
 
 def _remove_stored_file(stored_filename: str) -> None:

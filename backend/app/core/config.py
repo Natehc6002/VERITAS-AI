@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     upload_dir: Path = BACKEND_ROOT / "uploads"
     max_upload_size_mb: int = 20
     allowed_origins: str = "http://localhost:5173"
+    auth_secret_key: str = ""
+    access_token_ttl_minutes: int = 720
 
     @field_validator("upload_dir", mode="before")
     @classmethod

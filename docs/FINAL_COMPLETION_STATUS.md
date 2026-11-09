@@ -53,3 +53,31 @@ requires ownership checks. Commit messages otherwise follow the mandated sequenc
 
 ---
 *Updated after each checkpoint.*
+
+---
+
+## Checkpoint: Phase 2F — authentication and investigation isolation
+
+**Commit:** `feat: implement authentication and investigation isolation`
+
+Delivered (backend):
+- Stdlib auth primitives: `app/core/security.py` (pbkdf2 password hashing, HMAC-signed
+  expiring tokens) + `User`/`Investigation` ORM models (committed earlier as `618e383`,
+  which also fixed a signature-verification bug found by the new `test_security.py`).
+- `POST /api/v1/auth/register` (creates account + default investigation, first account
+  claims pre-auth orphan documents), `POST /api/v1/auth/login`, `GET /api/v1/auth/me`.
+- Bearer-token dependency (`app/api/deps.py`); every documents/extraction/analysis/
+  comparison endpoint now requires authentication.
+- Investigation CRUD (`/api/v1/investigations`) scoped to the owner; documents can be
+  uploaded/listed/filtered by owned investigation.
+- Ownership enforcement: foreign documents and investigations return 404 (no existence
+  leak); dashboard stats and duplicate-file detection are owner-scoped.
+- Lightweight SQLite migration adds `owner_id`/`investigation_id` to existing `documents`
+  tables without rebuilding the database.
+- `AUTH_SECRET_KEY`/`ACCESS_TOKEN_TTL_MINUTES` settings; ephemeral key fallback with a
+  startup warning when unconfigured.
+- Tests: `test_security.py` (21), `test_auth.py` (10), `test_isolation.py` (7) —
+  full backend suite **91 passed**; frontend build green.
+
+Note: the React frontend does not yet send bearer tokens (auth UI lands in Phase 4);
+API calls from the current UI will receive 401 until then.

@@ -7,17 +7,25 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import analysis, compare, documents, extraction, health
+from app.api.routes import analysis, auth, compare, documents, extraction, health, investigations
 from app.core.config import get_settings
 from app.core.database import init_db
 from app.core.errors import VeritasError
 
 logger = logging.getLogger(__name__)
 
-API_VERSION = "1.1.0"
+API_VERSION = "1.2.0"
 
 TAGS_METADATA = [
     {"name": "health", "description": "Service availability checks."},
+    {
+        "name": "auth",
+        "description": "Account registration, login and current user context.",
+    },
+    {
+        "name": "investigations",
+        "description": "Owner-scoped investigation containers for documents.",
+    },
     {
         "name": "documents",
         "description": "Secure document upload, listing, inspection and deletion.",
@@ -76,6 +84,8 @@ def create_app() -> FastAPI:
     _register_exception_handlers(application)
 
     application.include_router(health.router)
+    application.include_router(auth.router)
+    application.include_router(investigations.router)
     application.include_router(documents.router)
     application.include_router(extraction.router)
     application.include_router(analysis.router)

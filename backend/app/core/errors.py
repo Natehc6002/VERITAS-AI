@@ -35,5 +35,17 @@ class DocumentNotFoundError(VeritasError):
     status_code = 404
 
 
+class InvestigationNotFoundError(VeritasError):
+    status_code = 404
+
+
+class AuthenticationError(VeritasError):
+    status_code = 401
+
+
+class ConflictError(VeritasError):
+    status_code = 409
+
+
 class StorageError(VeritasError):
     status_code = 500

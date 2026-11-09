@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Integer, String
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
@@ -47,6 +47,12 @@ class Document(Base):
     )
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pdf_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    owner_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    investigation_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("investigations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     def __repr__(self) -> str:
         return f"<Document id={self.id} filename={self.original_filename!r}>"

@@ -15,6 +15,7 @@ os.environ["UPLOAD_DIR"] = str(_TEST_ROOT / "uploads")
 os.environ["MAX_UPLOAD_SIZE_MB"] = "1"
 os.environ["DEBUG"] = "true"
 os.environ["ALLOWED_ORIGINS"] = "http://localhost:5173"
+os.environ["AUTH_SECRET_KEY"] = "test-signing-key-not-for-production"
 
 import pymupdf  # noqa: E402
 import pytest  # noqa: E402
@@ -53,14 +54,34 @@ def make_pdf_bytes(text: str = "VERITAS AI test document") -> bytes:
 
 @pytest.fixture()
 def client() -> TestClient:
-    """App client bound to a fresh temp database and empty upload directory."""
+    """App client bound to a fresh temp database, registered and authenticated."""
     settings = get_settings()
     Base.metadata.drop_all(bind=engine)
     if settings.upload_dir.exists():
         shutil.rmtree(settings.upload_dir, ignore_errors=True)
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     with TestClient(create_app()) as test_client:
+        register = test_client.post(
+            "/api/v1/auth/register",
+            json={"email": "tester@veritas.test", "password": "test-password-123"},
+        )
+        assert register.status_code == 201, register.text
+        token = register.json()["access_token"]
+        test_client.headers.update({"Authorization": f"Bearer {token}"})
         yield test_client
+
+
+def register_user(client: TestClient, email: str, password: str = "test-password-123") -> str:
+    """Register an account and return its bearer token (does not change client headers)."""
+    response = client.post(
+        "/api/v1/auth/register", json={"email": email, "password": password}
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["access_token"]
+
+
+def auth_header(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture()

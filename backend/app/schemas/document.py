@@ -21,6 +21,7 @@ class DocumentResponse(BaseModel):
     processing_status: str
     page_count: int | None = None
     pdf_metadata: dict[str, Any] | None = None
+    investigation_id: str | None = None
 
 
 class DocumentListResponse(BaseModel):

@@ -39,7 +39,28 @@ def get_db() -> Iterator[Session]:
 
 
 def init_db() -> None:
-    """Create database tables if they do not exist yet."""
+    """Create database tables if they do not exist yet and run light migrations."""
     from app import models  # noqa: F401  (import registers models on Base)
 
     Base.metadata.create_all(bind=engine)
+    _run_lightweight_migrations(engine)
+
+
+def _run_lightweight_migrations(engine: Engine) -> None:
+    """Add ownership columns to pre-existing SQLite databases without rebuilding them."""
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(documents)").fetchall()
+        }
+        for column in ("owner_id", "investigation_id"):
+            if column not in columns:
+                conn.exec_driver_sql(f"ALTER TABLE documents ADD COLUMN {column} VARCHAR(36)")
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_documents_owner_id ON documents (owner_id)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_documents_investigation_id "
+            "ON documents (investigation_id)"
+        )

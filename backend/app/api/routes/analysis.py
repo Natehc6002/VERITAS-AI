@@ -1,10 +1,9 @@
 """Document understanding, forensic findings, evidence and statistics."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.api.deps import CurrentUser, DbSession
 from app.models.intelligence import Evidence, Finding
 from app.schemas.intelligence import (
     AnalysisResponse,
@@ -57,9 +56,10 @@ def _finding_response(finding: Finding, evidence: list[Evidence]) -> FindingResp
 )
 def analyze_document(
     document_id: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
+    user: CurrentUser,
 ) -> AnalysisResponse:
-    document = analysis_service.require_document(db, document_id)
+    document = analysis_service.require_document(db, document_id, user)
     bundle = analysis_service.run_analysis(db, document)
     return AnalysisResponse(**bundle)
 
@@ -76,9 +76,10 @@ def analyze_document(
 )
 def get_analysis(
     document_id: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
+    user: CurrentUser,
 ) -> AnalysisResponse:
-    document = analysis_service.require_document(db, document_id)
+    document = analysis_service.require_document(db, document_id, user)
     bundle = analysis_service.get_or_run_analysis(db, document)
     return AnalysisResponse(**bundle)
 
@@ -91,9 +92,10 @@ def get_analysis(
 )
 def list_findings(
     document_id: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
+    user: CurrentUser,
 ) -> list[FindingResponse]:
-    document = analysis_service.require_document(db, document_id)
+    document = analysis_service.require_document(db, document_id, user)
     findings = list(
         db.scalars(select(Finding).where(Finding.document_id == document.id)).all()
     )
@@ -110,11 +112,12 @@ def list_findings(
 )
 def list_entities(
     document_id: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
+    user: CurrentUser,
 ) -> list[EntityResponse]:
     from app.models.intelligence import Entity  # noqa: PLC0415
 
-    document = analysis_service.require_document(db, document_id)
+    document = analysis_service.require_document(db, document_id, user)
     entities = list(db.scalars(select(Entity).where(Entity.document_id == document.id)).all())
     return [
         EntityResponse(
@@ -141,9 +144,10 @@ def list_entities(
 )
 def list_evidence(
     document_id: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
+    user: CurrentUser,
 ) -> list[EvidenceResponse]:
-    document = analysis_service.require_document(db, document_id)
+    document = analysis_service.require_document(db, document_id, user)
     rows = list(db.scalars(select(Evidence).where(Evidence.document_id == document.id)).all())
     return [
         EvidenceResponse(
@@ -162,7 +166,7 @@ def list_evidence(
     "/stats",
     response_model=StatsResponse,
     summary="Dashboard statistics",
-    description="Aggregate counters derived from real database rows.",
+    description="Aggregate counters derived from real database rows, scoped to the user.",
 )
-def get_stats(db: Session = Depends(get_db)) -> StatsResponse:
-    return StatsResponse(**analysis_service.document_stats(db))
+def get_stats(db: DbSession, user: CurrentUser) -> StatsResponse:
+    return StatsResponse(**analysis_service.document_stats(db, user))

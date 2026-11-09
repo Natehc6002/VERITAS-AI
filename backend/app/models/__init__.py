@@ -11,6 +11,7 @@ from app.models.intelligence import (
     Finding,
     TextExtraction,
 )
+from app.models.user import Investigation, User
 
 __all__ = [
     "AnalysisStatus",
@@ -21,6 +22,8 @@ __all__ = [
     "ExtractionMethod",
     "ExtractionStatus",
     "Finding",
+    "Investigation",
     "ProcessingStatus",
     "TextExtraction",
+    "User",
 ]

@@ -19,6 +19,7 @@ from app.models.intelligence import (
     Finding,
     TextExtraction,
 )
+from app.models.user import User
 from app.services import classification, entity_extraction, forensics, text_extraction
 
 logger = logging.getLogger(__name__)
@@ -175,7 +176,11 @@ def _persist_entities(db: Session, document: Document, extraction: TextExtractio
 def _persist_findings(db: Session, document: Document, extraction: TextExtraction) -> list[Finding]:
     duplicate_of = (
         db.query(Document)
-        .filter(Document.sha256_hash == document.sha256_hash, Document.id != document.id)
+        .filter(
+            Document.sha256_hash == document.sha256_hash,
+            Document.id != document.id,
+            Document.owner_id == document.owner_id,
+        )
         .first()
     )
     finding_dicts = forensics.analyze_document(document, extraction, duplicate_of=duplicate_of)
@@ -291,27 +296,57 @@ def _extraction_payload(document: Document, extraction: TextExtraction | None) -
     }
 
 
-def document_stats(db: Session) -> dict[str, Any]:
-    """Dashboard statistics derived from real database rows."""
-    total = db.scalar(select(func.count()).select_from(Document)) or 0
+def document_stats(db: Session, user: User) -> dict[str, Any]:
+    """Dashboard statistics derived from real database rows, scoped to ``user``."""
+    owned_documents = select(Document.id).where(Document.owner_id == user.id)
+
+    total = db.scalar(select(func.count()).select_from(Document).where(Document.owner_id == user.id)) or 0
     by_status = dict(
         db.execute(
-            select(Document.processing_status, func.count()).group_by(Document.processing_status)
+            select(Document.processing_status, func.count())
+            .where(Document.owner_id == user.id)
+            .group_by(Document.processing_status)
         ).all()
     )
     recent = list(
-        db.scalars(select(Document).order_by(Document.upload_timestamp.desc()).limit(5)).all()
+        db.scalars(
+            select(Document)
+            .where(Document.owner_id == user.id)
+            .order_by(Document.upload_timestamp.desc())
+            .limit(5)
+        ).all()
     )
-    findings_total = db.scalar(select(func.count()).select_from(Finding)) or 0
+    findings_total = (
+        db.scalar(
+            select(func.count())
+            .select_from(Finding)
+            .where(Finding.document_id.in_(owned_documents))
+        )
+        or 0
+    )
     findings_by_severity = dict(
-        db.execute(select(Finding.severity, func.count()).group_by(Finding.severity)).all()
+        db.execute(
+            select(Finding.severity, func.count())
+            .where(Finding.document_id.in_(owned_documents))
+            .group_by(Finding.severity)
+        ).all()
     )
-    entities_total = db.scalar(select(func.count()).select_from(Entity)) or 0
+    entities_total = (
+        db.scalar(
+            select(func.count())
+            .select_from(Entity)
+            .where(Entity.document_id.in_(owned_documents))
+        )
+        or 0
+    )
     extractions_completed = (
         db.scalar(
             select(func.count())
             .select_from(TextExtraction)
-            .where(TextExtraction.status == ExtractionStatus.COMPLETED.value)
+            .where(
+                TextExtraction.status == ExtractionStatus.COMPLETED.value,
+                TextExtraction.document_id.in_(owned_documents),
+            )
         )
         or 0
     )
@@ -338,9 +373,10 @@ def document_stats(db: Session) -> dict[str, Any]:
     }
 
 
-def require_document(db: Session, document_id: str) -> Document:
+def require_document(db: Session, document_id: str, user: User) -> Document:
+    """Return the document only when it exists and belongs to ``user``."""
     document = db.get(Document, str(document_id)) if _is_uuid(document_id) else None
-    if document is None:
+    if document is None or document.owner_id != user.id:
         raise DocumentNotFoundError("Document not found.")
     return document
 

@@ -1,9 +1,8 @@
 """Text extraction endpoints."""
 
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, status
 
-from app.core.database import get_db
+from app.api.deps import CurrentUser, DbSession
 from app.models.document import Document
 from app.schemas.intelligence import ExtractionResponse
 from app.services import analysis_service, text_extraction
@@ -38,9 +37,10 @@ def _extraction_response(document: Document, extraction) -> ExtractionResponse:
 )
 def extract_text(
     document_id: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
+    user: CurrentUser,
 ) -> ExtractionResponse:
-    document = analysis_service.require_document(db, document_id)
+    document = analysis_service.require_document(db, document_id, user)
     extraction = text_extraction.extract_document_text(db, document)
     return _extraction_response(document, extraction)
 
@@ -56,8 +56,9 @@ def extract_text(
 )
 def get_text(
     document_id: str,
-    db: Session = Depends(get_db),
+    db: DbSession,
+    user: CurrentUser,
 ) -> ExtractionResponse:
-    document = analysis_service.require_document(db, document_id)
+    document = analysis_service.require_document(db, document_id, user)
     extraction = text_extraction.require_extraction(db, document)
     return _extraction_response(document, extraction)
