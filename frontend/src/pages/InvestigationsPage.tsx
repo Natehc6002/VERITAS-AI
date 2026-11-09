@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Download, FileStack, Plus, Trash2 } from 'lucide-react'
+import { Download, FileStack, FolderOpen, Plus, Trash2 } from 'lucide-react'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState, ErrorAlert, SuccessAlert } from '../components/primitives'
+import { useToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
 import { documentsApi, errorMessage, investigationsApi } from '../services/api'
 import type { InvestigationRecord } from '../types/api'
 
 export function InvestigationsPage() {
   const { investigations, refreshInvestigations } = useAuth()
+  const { toast } = useToast()
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -51,6 +53,7 @@ export function InvestigationsPage() {
       setDescription('')
       await refreshInvestigations()
       await loadCounts()
+      toast('success', 'Investigation created', `“${item.name}” is ready for documents.`)
     } catch (error) {
       setCreateError(errorMessage(error))
     } finally {
@@ -66,6 +69,7 @@ export function InvestigationsPage() {
       setPendingDelete(null)
       await refreshInvestigations()
       await loadCounts()
+      toast('info', 'Investigation deleted', 'Documents remain in your library.')
     } catch (error) {
       setPageError(errorMessage(error))
       setPendingDelete(null)
@@ -87,6 +91,7 @@ export function InvestigationsPage() {
       anchor.click()
       anchor.remove()
       URL.revokeObjectURL(url)
+      toast('success', 'Report downloaded', `Forensic PDF for “${investigation.name}” saved.`)
     } catch (error) {
       setPageError(errorMessage(error))
     } finally {
@@ -164,21 +169,30 @@ export function InvestigationsPage() {
         ) : (
           <div className="investigation-list">
             {investigations.map((investigation) => (
-              <div className="investigation-row" key={investigation.id}>
+              <div className="case-row" key={investigation.id}>
+                <span className="case-icon">
+                  <FolderOpen size={17} />
+                </span>
                 <div className="grow">
-                  <div className="file-name">{investigation.name}</div>
-                  <div className="file-sub">
-                    <FileStack size={13} /> {counts[investigation.id] ?? 0} document
-                    {(counts[investigation.id] ?? 0) === 1 ? '' : 's'} · created{' '}
-                    {new Date(investigation.created_at).toLocaleDateString()}
+                  <div className="file-name" style={{ maxWidth: '100%' }}>
+                    {investigation.name}
+                  </div>
+                  <div className="case-meta">
+                    <FileStack size={12} />
+                    <span>
+                      {counts[investigation.id] ?? 0} document
+                      {(counts[investigation.id] ?? 0) === 1 ? '' : 's'}
+                    </span>
+                    <span>·</span>
+                    <span>opened {new Date(investigation.created_at).toLocaleDateString()}</span>
                   </div>
                   {investigation.description ? (
-                    <div className="muted small" style={{ marginTop: 4 }}>
+                    <div className="muted small" style={{ marginTop: 5 }}>
                       {investigation.description}
                     </div>
                   ) : null}
                 </div>
-                <div className="flex" style={{ gap: 8 }}>
+                <div className="case-actions">
                   <button
                     type="button"
                     className="btn btn-sm btn-primary"

@@ -87,8 +87,8 @@ export function ComparePage() {
           <h1>Cross-document comparison</h1>
           <p className="subtitle">
             Select two or more documents to find shared entities, related records and conflicting
-            values. Matching is exact on normalised values and every result names its source
-            documents and pages.
+            values. Matching is exact on normalised values plus fuzzy similarity for near-identical
+            names — every result names its source documents and pages.
           </p>
         </div>
       </div>
@@ -249,6 +249,17 @@ function CompareReport({ report }: { report: CompareResponse }) {
             <div className="stat-label">Conflicts to review</div>
           </div>
         </div>
+        {summary.fuzzy_match_count ? (
+          <div className="stat-card">
+            <span className="stat-icon accent">
+              <GitCompareArrows size={19} />
+            </span>
+            <div>
+              <div className="stat-value">{summary.fuzzy_match_count}</div>
+              <div className="stat-label">Fuzzy name matches</div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <section className="card">
@@ -301,27 +312,57 @@ function CompareReport({ report }: { report: CompareResponse }) {
         {report.shared_entities.length === 0 ? (
           <p className="muted">No extracted values appear in more than one document.</p>
         ) : (
-          report.shared_entities.map((item, index) => (
-            <div className="shared-row" key={`${item.entity_type}-${index}`}>
-              <div className="grow">
-                <div className="flex flex-wrap" style={{ gap: 8 }}>
-                  <Badge tone="accent">
-                    {ENTITY_TYPE_LABELS[item.entity_type] ?? item.entity_type}
-                  </Badge>
-                  <span className="finding-title">{item.value}</span>
-                  <Badge tone="neutral">{item.document_count} documents</Badge>
-                </div>
-                <div className="small dim mt-8">
-                  {item.occurrences
-                    .map(
-                      (occ) =>
-                        `${occ.document_name}${occ.page_number ? ` (p.${occ.page_number})` : ''}`,
-                    )
-                    .join(' · ')}
+          report.shared_entities.map((item, index) => {
+            const isFuzzy = item.match_type === 'fuzzy'
+            const similarity =
+              item.similarity !== null && item.similarity !== undefined ? item.similarity : null
+            return (
+              <div className="shared-row" key={`${item.entity_type}-${index}`}>
+                <div className="grow">
+                  <div className="flex flex-wrap" style={{ gap: 8 }}>
+                    <Badge tone="accent">
+                      {ENTITY_TYPE_LABELS[item.entity_type] ?? item.entity_type}
+                    </Badge>
+                    <span className="finding-title">{item.value}</span>
+                    <Badge tone="neutral">{item.document_count} documents</Badge>
+                    {isFuzzy ? (
+                      <Badge tone="warning">fuzzy match</Badge>
+                    ) : (
+                      <Badge tone="neutral">exact match</Badge>
+                    )}
+                  </div>
+
+                  {isFuzzy && similarity !== null ? (
+                    <div className="flex flex-wrap mt-8" style={{ gap: 12, alignItems: 'center' }}>
+                      <div className="match-meter" aria-label={`${(similarity * 100).toFixed(1)} percent similar`}>
+                        <span className="track">
+                          <span
+                            className="fill"
+                            style={{ width: `${Math.round(similarity * 100)}%` }}
+                          />
+                        </span>
+                        <span className="pct">{(similarity * 100).toFixed(1)}%</span>
+                      </div>
+                      <span className="small dim">similarity across variants</span>
+                    </div>
+                  ) : null}
+
+                  {isFuzzy && item.fuzzy_variant ? (
+                    <div className="fuzzy-vs">also seen as: “{item.fuzzy_variant}”</div>
+                  ) : null}
+
+                  <div className="small dim mt-8">
+                    {item.occurrences
+                      .map(
+                        (occ) =>
+                          `${occ.document_name}${occ.page_number ? ` (p.${occ.page_number})` : ''}`,
+                      )
+                      .join(' · ')}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            )
+          })
         )}
       </section>
 

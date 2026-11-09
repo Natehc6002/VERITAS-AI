@@ -121,6 +121,9 @@ export interface SharedEntity {
   document_count: number
   occurrences: SharedEntityOccurrence[]
   explanation: string
+  match_type?: 'exact' | 'fuzzy'
+  similarity?: number | null
+  fuzzy_variant?: string | null
 }
 
 export interface RelatedRecord {
@@ -150,6 +153,7 @@ export interface CompareResponse {
     shared_entity_count: number
     related_record_count: number
     conflict_count: number
+    fuzzy_match_count?: number
   }
   method: string
   disclaimer: string
