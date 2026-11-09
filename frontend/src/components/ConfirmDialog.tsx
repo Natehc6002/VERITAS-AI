@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Trash2, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -22,6 +23,18 @@ export function ConfirmDialog({
   onCancel: () => void
   children?: ReactNode
 }) {
+  const confirmRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    confirmRef.current?.focus()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) onCancel()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, busy, onCancel])
+
   if (!open) return null
   return (
     <div
@@ -59,6 +72,7 @@ export function ConfirmDialog({
           </button>
           <button
             type="button"
+            ref={confirmRef}
             className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
             onClick={onConfirm}
             disabled={busy}

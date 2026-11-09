@@ -14,6 +14,7 @@ import {
 import { analysisApi, documentsApi, errorMessage } from '../services/api'
 import type { AnalysisBundle, DocumentRecord, ExtractionResponse } from '../types/api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useToast } from '../components/Toast'
 import {
   Badge,
   Collapsible,
@@ -39,6 +40,7 @@ type TabKey = 'overview' | 'text' | 'analysis' | 'evidence'
 export function DocumentDetailPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const { toast } = useToast()
 
   const [document, setDocument] = useState<DocumentRecord | null>(null)
   const [extraction, setExtraction] = useState<ExtractionResponse | null>(null)
@@ -112,6 +114,7 @@ export function DocumentDetailPage() {
     setDeleting(true)
     try {
       await documentsApi.remove(id)
+      toast('info', 'Document deleted', `“${document?.original_filename ?? ''}” was removed.`)
       navigate('/documents')
     } catch (err) {
       setActionError(errorMessage(err))

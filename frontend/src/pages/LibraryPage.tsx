@@ -6,6 +6,7 @@ import type { DocumentRecord } from '../types/api'
 import { DocumentTable } from '../components/DocumentTable'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState, ErrorAlert, LoadingBlock } from '../components/primitives'
+import { useToast } from '../components/Toast'
 import { pageRangeLabel } from '../utils/format'
 
 type SortKey = 'newest' | 'oldest' | 'name' | 'size'
@@ -35,6 +36,7 @@ function sortDocuments(documents: DocumentRecord[], key: SortKey): DocumentRecor
 const PAGE_SIZE = 10
 
 export function LibraryPage() {
+  const { toast } = useToast()
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -72,10 +74,12 @@ export function LibraryPage() {
     if (!pendingDelete) return
     setDeleting(true)
     setDeleteError(null)
+    const name = pendingDelete.original_filename
     try {
       await documentsApi.remove(pendingDelete.id)
       setPendingDelete(null)
       load()
+      toast('info', 'Document deleted', `“${name}” and its analysis results were removed.`)
     } catch (err) {
       setDeleteError(errorMessage(err))
     } finally {
