@@ -5,6 +5,7 @@ import {
   BrainCircuit,
   Database,
   FileSearch,
+  Info,
   ScrollText,
   Sparkles,
   Trash2,
@@ -634,6 +635,15 @@ function AnalysisTab({
           <span className="card-hint">{analysis.findings.length} raised</span>
         </div>
 
+        <div className="auto-banner">
+          <Info size={15} />
+          <span>
+            <strong>Automated indicators — human verification required.</strong> These findings are
+            produced by deterministic rules over stored metadata and page text. Each one expands to
+            show its source evidence; none of them is a verdict about the document's authenticity.
+          </span>
+        </div>
+
         <div className="disclaimer" style={{ marginBottom: 14 }}>
           <span>{analysis.disclaimer}</span>
         </div>
@@ -681,7 +691,17 @@ function AnalysisTab({
                         <span className="mono">{item.source_ref}</span>
                         {item.page_number ? <span>· page {item.page_number}</span> : null}
                       </div>
-                      {item.excerpt ? <div className="ev-excerpt">{item.excerpt}</div> : null}
+                      {item.excerpt ? (
+                        <>
+                          <div className="mt-8">
+                            <span className="ev-label source">Source excerpt</span>
+                          </div>
+                          <div className="ev-excerpt">{item.excerpt}</div>
+                        </>
+                      ) : null}
+                      <div className="mt-8">
+                        <span className="ev-label interp">Interpretation</span>
+                      </div>
                       <div className="ev-explanation">{item.explanation}</div>
                     </div>
                   ))}
@@ -750,7 +770,17 @@ function EvidenceTab({ analysis }: { analysis: AnalysisBundle | null }) {
             <div className="finding-title" style={{ marginBottom: 6 }}>
               {item.findingTitle}
             </div>
-            {item.excerpt ? <div className="ev-excerpt">{item.excerpt}</div> : null}
+            {item.excerpt ? (
+              <>
+                <div className="mt-8">
+                  <span className="ev-label source">Source excerpt</span>
+                </div>
+                <div className="ev-excerpt">{item.excerpt}</div>
+              </>
+            ) : null}
+            <div className="mt-8">
+              <span className="ev-label interp">Interpretation</span>
+            </div>
             <div className="ev-explanation">{item.explanation}</div>
           </div>
         ))

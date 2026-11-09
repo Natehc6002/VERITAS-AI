@@ -460,7 +460,9 @@ code, .mono {
 .search-wrap .input { padding-left: 34px; min-width: 240px; }
 
 .field-label {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -1716,3 +1718,8 @@ button:focus-visible {
   .hero-actions { width: 100%; }
   .hero-actions .btn { flex: 1; justify-content: center; }
 }
+
+/* ---- Inline loading spinner (buttons) ---- */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.9s linear infinite; }
+.btn .spin { flex-shrink: 0; }

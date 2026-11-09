@@ -77,6 +77,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 
 export const FINDING_CATEGORY_LABELS: Record<string, string> = {
   missing_metadata: 'Missing metadata',
+  exif_metadata_present: 'EXIF metadata present',
   timestamp_anomaly: 'Timestamp anomaly',
   producer_anomaly: 'Producer anomaly',
   empty_or_sparse_text: 'Sparse text',

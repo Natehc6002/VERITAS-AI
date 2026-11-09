@@ -123,6 +123,21 @@ export function UploadPage() {
       </section>
 
       <section className="card">
+        <div className="card-head">
+          <h3>
+            Upload queue
+            {queue.length > 0 ? <span className="card-hint" style={{ marginLeft: 8 }}>{queue.length} file{queue.length === 1 ? '' : 's'}</span> : null}
+          </h3>
+          {queue.length > 0 && uploadingCount === 0 ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setQueue([])}
+            >
+              <Trash2 size={14} /> Clear list
+            </button>
+          ) : null}
+        </div>
         <FileDropzone onFiles={handleFiles} disabled={uploadingCount > 0} />
         {uploadingCount > 0 ? (
           <div className="mt-16 muted small">Uploading {uploadingCount} file(s)…</div>
