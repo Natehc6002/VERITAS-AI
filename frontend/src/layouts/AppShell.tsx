@@ -1,19 +1,23 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Activity,
+  FolderOpen,
   FileStack,
   GitCompareArrows,
   LayoutDashboard,
+  LogOut,
   ShieldCheck,
   Upload,
 } from 'lucide-react'
 import { analysisApi } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/upload', label: 'Upload', icon: Upload, end: false },
   { to: '/documents', label: 'Documents', icon: FileStack, end: false },
+  { to: '/investigations', label: 'Investigations', icon: FolderOpen, end: false },
   { to: '/compare', label: 'Compare', icon: GitCompareArrows, end: false },
 ]
 
@@ -22,6 +26,7 @@ const PAGE_TITLES: Array<[RegExp, string]> = [
   [/^\/upload$/, 'Document upload'],
   [/^\/documents$/, 'Document library'],
   [/^\/documents\/.+/, 'Document investigation'],
+  [/^\/investigations$/, 'Investigations'],
   [/^\/compare$/, 'Cross-document comparison'],
 ]
 
@@ -32,6 +37,8 @@ function pageTitle(pathname: string): string {
 
 export function AppShell() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user, logout } = useAuth()
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking')
 
   useEffect(() => {
@@ -94,7 +101,24 @@ export function AppShell() {
                   : 'Checking backend…'}
             </span>
           </div>
-          <div className="mt-8">v1.1 · rule-based intelligence</div>
+          {user ? (
+            <div className="sidebar-user">
+              <div className="muted small" title={user.email}>
+                {user.email}
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={() => {
+                  logout()
+                  navigate('/login', { replace: true })
+                }}
+              >
+                <LogOut size={14} /> Sign out
+              </button>
+            </div>
+          ) : null}
+          <div className="mt-8">v1.2 · rule-based intelligence</div>
         </div>
       </aside>
 

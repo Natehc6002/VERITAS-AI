@@ -11,6 +11,7 @@ export interface DocumentRecord {
   processing_status: string
   page_count: number | null
   pdf_metadata: PdfMetadata | null
+  investigation_id?: string | null
 }
 
 export interface PdfMetadata {
@@ -172,4 +173,31 @@ export interface StatsResponse {
   findings_by_severity: Record<string, number>
   total_entities: number
   recent_documents: RecentDocument[]
+}
+
+export interface UserRecord {
+  id: string
+  email: string
+  created_at: string
+}
+
+export interface InvestigationRecord {
+  id: string
+  name: string
+  description: string | null
+  owner_id: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+  user: UserRecord
+  investigation: InvestigationRecord | null
+}
+
+export interface AuthContextResponse {
+  user: UserRecord
+  investigations: InvestigationRecord[]
 }

@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios'
 import type {
   AnalysisBundle,
+  AuthContextResponse,
   CompareRequest,
   CompareResponse,
   DocumentListResponse,
@@ -10,17 +11,74 @@ import type {
   EvidenceRecord,
   FindingRecord,
   HealthResponse,
+  InvestigationRecord,
   StatsResponse,
+  TokenResponse,
 } from '../types/api'
 
 // Same-origin by default: the Vite dev server proxies /api to the backend.
 // Set VITE_API_BASE to call the backend directly (CORS must allow the origin).
 const BASE_URL: string = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 
+const TOKEN_STORAGE_KEY = 'veritas_access_token'
+
+export function getToken(): string | null {
+  try {
+    return window.localStorage.getItem(TOKEN_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setToken(token: string): void {
+  try {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  } catch {
+    /* storage unavailable – session-only fallback */
+  }
+}
+
+export function clearToken(): void {
+  try {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Fired when the backend rejects the stored token (401). */
+export const UNAUTHORIZED_EVENT = 'veritas:unauthorized'
+
 export const api = axios.create({
   baseURL: BASE_URL,
   timeout: 120_000,
 })
+
+api.interceptors.request.use((config) => {
+  const token = getToken()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status
+      const url = error.config?.url ?? ''
+      if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/register')) {
+        const hadToken = getToken() !== null
+        clearToken()
+        if (hadToken) {
+          window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+        }
+      }
+    }
+    return Promise.reject(error)
+  },
+)
 
 export interface UploadProgress {
   loaded: number
@@ -48,7 +106,9 @@ export function errorMessage(error: unknown): string {
 }
 
 export const documentsApi = {
-  list: async (params: { page?: number; page_size?: number; search?: string } = {}) => {
+  list: async (
+    params: { page?: number; page_size?: number; search?: string; investigation_id?: string } = {},
+  ) => {
     const { data } = await api.get<DocumentListResponse>('/api/v1/documents', { params })
     return data
   },
@@ -61,9 +121,13 @@ export const documentsApi = {
   upload: async (
     file: File,
     onProgress?: (progress: UploadProgress) => void,
+    investigationId?: string | null,
   ) => {
     const form = new FormData()
     form.append('file', file)
+    if (investigationId) {
+      form.append('investigation_id', investigationId)
+    }
     const { data } = await api.post<DocumentRecord>('/api/v1/documents/upload', form, {
       timeout: 300_000,
       onUploadProgress: (event) => {
@@ -131,6 +195,51 @@ export const analysisApi = {
 
   health: async () => {
     const { data } = await api.get<HealthResponse>('/api/v1/health')
+    return data
+  },
+}
+
+export const authApi = {
+  register: async (email: string, password: string) => {
+    const { data } = await api.post<TokenResponse>('/api/v1/auth/register', { email, password })
+    return data
+  },
+
+  login: async (email: string, password: string) => {
+    const { data } = await api.post<TokenResponse>('/api/v1/auth/login', { email, password })
+    return data
+  },
+
+  me: async () => {
+    const { data } = await api.get<AuthContextResponse>('/api/v1/auth/me')
+    return data
+  },
+}
+
+export const investigationsApi = {
+  list: async () => {
+    const { data } = await api.get<InvestigationRecord[]>('/api/v1/investigations')
+    return data
+  },
+
+  create: async (name: string, description?: string) => {
+    const { data } = await api.post<InvestigationRecord>('/api/v1/investigations', {
+      name,
+      description: description || null,
+    })
+    return data
+  },
+
+  remove: async (id: string) => {
+    const { data } = await api.delete<{ message: string }>(`/api/v1/investigations/${id}`)
+    return data
+  },
+
+  report: async (id: string) => {
+    const { data } = await api.get<Blob>(`/api/v1/investigations/${id}/report`, {
+      responseType: 'blob',
+      timeout: 180_000,
+    })
     return data
   },
 }

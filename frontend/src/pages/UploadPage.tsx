@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircle2, FileWarning, Trash2, XCircle } from 'lucide-react'
 import { documentsApi, errorMessage } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 import type { DocumentRecord } from '../types/api'
 import { FileDropzone, type PickedFile } from '../components/FileDropzone'
 import { ErrorAlert, FileIcon, SuccessAlert } from '../components/primitives'
@@ -15,7 +16,9 @@ type QueueState =
   | { kind: 'failed'; file: File; error: string }
 
 export function UploadPage() {
+  const { investigations } = useAuth()
   const [queue, setQueue] = useState<QueueState[]>([])
+  const [investigationId, setInvestigationId] = useState<string>('')
 
   const update = useCallback((index: number, next: QueueState) => {
     setQueue((current) => current.map((item, i) => (i === index ? next : item)))
@@ -25,19 +28,23 @@ export function UploadPage() {
     async (index: number, file: File) => {
       update(index, { kind: 'uploading', file, progress: 0 })
       try {
-        const document = await documentsApi.upload(file, ({ loaded, total }) => {
-          update(index, {
-            kind: 'uploading',
-            file,
-            progress: total > 0 ? Math.round((loaded / total) * 100) : 0,
-          })
-        })
+        const document = await documentsApi.upload(
+          file,
+          ({ loaded, total }) => {
+            update(index, {
+              kind: 'uploading',
+              file,
+              progress: total > 0 ? Math.round((loaded / total) * 100) : 0,
+            })
+          },
+          investigationId || null,
+        )
         update(index, { kind: 'done', file, document })
       } catch (error) {
         update(index, { kind: 'failed', file, error: errorMessage(error) })
       }
     },
-    [update],
+    [update, investigationId],
   )
 
   const handleFiles = useCallback(
@@ -87,6 +94,33 @@ export function UploadPage() {
           message="See the individual messages below for the reason (type, size or content mismatch)."
         />
       ) : null}
+
+      <section className="card">
+        <div className="card-head">
+          <h3>File destination</h3>
+        </div>
+        <label className="field-label" htmlFor="upload-investigation">
+          Investigation
+        </label>
+        <select
+          id="upload-investigation"
+          className="select"
+          value={investigationId}
+          onChange={(event) => setInvestigationId(event.target.value)}
+          style={{ maxWidth: 420 }}
+        >
+          <option value="">No investigation (unfiled)</option>
+          {investigations.map((investigation) => (
+            <option key={investigation.id} value={investigation.id}>
+              {investigation.name}
+            </option>
+          ))}
+        </select>
+        <p className="muted small" style={{ marginTop: 6 }}>
+          Filed documents are grouped into the case and included in its{' '}
+          <Link to="/investigations">PDF report</Link>.
+        </p>
+      </section>
 
       <section className="card">
         <FileDropzone onFiles={handleFiles} disabled={uploadingCount > 0} />
