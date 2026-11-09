@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment / local config
+.env
+
+# Database files
+*.db
+*.db-journal
+*.sqlite3
+
+# Uploaded documents (keep the directory, ignore its contents)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Local run logs
+*.log
+*.log.err
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Environment variants
+.env*
+!.env.example
+
+# Python tooling
+.mypy_cache/
+.ruff_cache/
+
+# Temporary error logs
+*.err
