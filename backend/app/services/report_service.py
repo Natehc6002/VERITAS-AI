@@ -348,8 +348,23 @@ def _comparison_section(builder: _PdfBuilder, comparison: dict[str, Any]) -> Non
     if not shared:
         builder.text("No shared normalized entity values were found.", color=GREY)
     for item in shared[:40]:
-        docs = ", ".join(item.get("document_names") or [])
-        builder.bullet(f"{item.get('entity_type', '')}: {item.get('value', '')} — {docs}")
+        docs = ", ".join(
+            item.get("document_names")
+            or [
+                str(occ.get("document_name", ""))
+                for occ in item.get("occurrences") or []
+            ]
+        )
+        similarity = item.get("similarity")
+        label = (
+            f"{item.get('entity_type', '')}: {item.get('value', '')} — {docs}"
+            if item.get("match_type") != "fuzzy"
+            else (
+                f"{item.get('entity_type', '')}: {item.get('value', '')} ≈ "
+                f"{item.get('fuzzy_variant', '')} ({float(similarity or 0):.0%} similar) — {docs}"
+            )
+        )
+        builder.bullet(label)
     if len(shared) > 40:
         builder.bullet(f"… {len(shared) - 40} further shared entities omitted.")
 
@@ -377,7 +392,8 @@ def _comparison_section(builder: _PdfBuilder, comparison: dict[str, Any]) -> Non
     builder.spacer(4)
     builder.text(
         f"Summary: {summary.get('documents_compared', 0)} document(s), "
-        f"{summary.get('shared_entity_count', 0)} shared entities, "
+        f"{summary.get('shared_entity_count', 0)} shared values "
+        f"({summary.get('fuzzy_match_count', 0)} fuzzy), "
         f"{summary.get('related_record_count', 0)} related record pair(s), "
         f"{summary.get('conflict_count', 0)} conflict(s).",
         size=9,

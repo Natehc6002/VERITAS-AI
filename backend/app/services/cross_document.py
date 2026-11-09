@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from typing import Any
 
 from sqlalchemy import select
@@ -16,6 +17,11 @@ from app.models.intelligence import Entity, TextExtraction
 SINGLE_VALUED_TYPES = {"document_identifier"}
 
 RELATED_THRESHOLD = 2
+
+# Fuzzy (near-match) sharing is limited to name-like types so identifiers,
+# dates and amounts are never merged by similarity.
+FUZZY_ENTITY_TYPES = {"organization", "person_name", "address"}
+FUZZY_THRESHOLD = 0.80
 
 
 @dataclass
@@ -49,9 +55,14 @@ def compare_documents(db: Session, document_ids: list[str]) -> dict[str, Any]:
     if len(contexts) < 2:
         raise ValueError("At least two distinct documents are required for comparison.")
 
-    shared = _shared_entities(contexts)
+    exact_shared = _shared_entities(contexts)
+    fuzzy_shared = _fuzzy_shared_entities(contexts, exact_shared)
+    shared = sorted(
+        exact_shared + fuzzy_shared,
+        key=lambda item: (-item["document_count"], item["entity_type"], item["value"]),
+    )
     related = _related_records(contexts, shared)
-    conflicts = _conflicts(contexts, shared)
+    conflicts = _conflicts(contexts, exact_shared)
 
     return {
         "document_ids": [ctx.document.id for ctx in contexts],
@@ -62,10 +73,11 @@ def compare_documents(db: Session, document_ids: list[str]) -> dict[str, Any]:
         "summary": {
             "documents_compared": len(contexts),
             "shared_entity_count": len(shared),
+            "fuzzy_match_count": len(fuzzy_shared),
             "related_record_count": len(related),
             "conflict_count": len(conflicts),
         },
-        "method": "exact_normalized_matching",
+        "method": "exact_normalized_matching+fuzzy_name_matching",
         "disclaimer": (
             "Matches and conflicts are explainable observations derived from extracted "
             "text. Shared values are not inherently suspicious and conflicting values are "
@@ -94,6 +106,7 @@ def _shared_entities(contexts: list[_DocContext]) -> list[dict[str, Any]]:
                 "entity_type": entity_type,
                 "value": occurrences[0][1].value,
                 "normalized_value": key_value,
+                "match_type": "exact",
                 "document_count": len(docs),
                 "occurrences": [
                     {
@@ -113,6 +126,93 @@ def _shared_entities(contexts: list[_DocContext]) -> list[dict[str, Any]]:
         )
     shared.sort(key=lambda item: (-item["document_count"], item["entity_type"], item["value"]))
     return shared
+
+
+def _fuzzy_shared_entities(
+    contexts: list[_DocContext], exact_shared: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Near-identical name-like values across documents (difflib similarity).
+
+    Only organization / person / address values are considered, the threshold is
+    ``FUZZY_THRESHOLD`` and values already exactly shared are skipped.
+    """
+    exact_keys = {
+        (item["entity_type"], item["normalized_value"]) for item in exact_shared
+    }
+    # Per type -> document -> list of (normalized, entity)
+    per_type: dict[str, dict[str, list[tuple[str, Entity]]]] = {}
+    for ctx in contexts:
+        for entity in ctx.entities:
+            if entity.entity_type not in FUZZY_ENTITY_TYPES:
+                continue
+            norm = (entity.normalized_value or entity.value).strip().lower()
+            if not norm or len(norm) < 6:
+                continue
+            per_type.setdefault(entity.entity_type, {}).setdefault(
+                ctx.document.id, []
+            ).append((norm, entity))
+
+    fuzzy: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    name_by_id = {ctx.document.id: ctx.document.original_filename for ctx in contexts}
+
+    for entity_type, doc_values in per_type.items():
+        doc_ids = sorted(doc_values)
+        for i in range(len(doc_ids)):
+            for j in range(i + 1, len(doc_ids)):
+                left_id, right_id = doc_ids[i], doc_ids[j]
+                for left_norm, left_entity in doc_values[left_id]:
+                    if (entity_type, left_norm) in exact_keys:
+                        continue
+                    for right_norm, right_entity in doc_values[right_id]:
+                        if left_norm == right_norm:
+                            continue
+                        if (entity_type, right_norm) in exact_keys:
+                            continue
+                        pair_key = tuple(sorted((left_norm, right_norm)))
+                        marker = (entity_type, pair_key[0], pair_key[1])
+                        if marker in seen:
+                            continue
+                        ratio = SequenceMatcher(None, left_norm, right_norm).ratio()
+                        if ratio < FUZZY_THRESHOLD:
+                            continue
+                        seen.add(marker)
+                        fuzzy.append(
+                            {
+                                "entity_type": entity_type,
+                                "value": left_entity.value,
+                                "normalized_value": left_norm,
+                                "match_type": "fuzzy",
+                                "similarity": round(ratio, 3),
+                                "fuzzy_variant": right_entity.value,
+                                "document_count": 2,
+                                "occurrences": [
+                                    {
+                                        "document_id": left_id,
+                                        "document_name": name_by_id[left_id],
+                                        "page_number": left_entity.page_number,
+                                        "source_text": left_entity.source_text,
+                                        "confidence": left_entity.confidence,
+                                    },
+                                    {
+                                        "document_id": right_id,
+                                        "document_name": name_by_id[right_id],
+                                        "page_number": right_entity.page_number,
+                                        "source_text": right_entity.source_text,
+                                        "confidence": right_entity.confidence,
+                                    },
+                                ],
+                                "explanation": (
+                                    f"Fuzzy match ({ratio:.0%} similar): "
+                                    f"'{left_entity.value}' in {name_by_id[left_id]} "
+                                    f"≈ '{right_entity.value}' in {name_by_id[right_id]}. "
+                                    "Similar names may refer to the same entity and "
+                                    "require human review."
+                                ),
+                            }
+                        )
+    fuzzy.sort(key=lambda item: (-item["similarity"], item["entity_type"]))
+    return fuzzy
 
 
 def _related_records(contexts: list[_DocContext], shared: list[dict[str, Any]]) -> list[dict[str, Any]]:

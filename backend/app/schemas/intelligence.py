@@ -110,6 +110,9 @@ class SharedEntity(BaseModel):
     document_count: int
     occurrences: list[SharedEntityOccurrence]
     explanation: str
+    match_type: str = "exact"
+    similarity: float | None = None
+    fuzzy_variant: str | None = None
 
 
 class RelatedRecord(BaseModel):

@@ -95,7 +95,7 @@ _PERSON_TITLE_RE = re.compile(
 )
 
 _ORG_RE = re.compile(
-    r"\b([A-Z][A-Za-z0-9&.'-]*(?:\s+[A-Z0-9&.'-]+){0,6}\s+"
+    r"\b([A-Z][A-Za-z0-9&.'-]*(?:\s+[A-Za-z0-9&.'-]+){0,6}\s+"
     r"(?:Inc\.?|Ltd\.?|LLC|L\.L\.C\.|Corp\.?|Corporation|Company|Co\.|Pvt\.?\s*Ltd\.?|"
     r"Gmbh|S\.A\.|plc|Bank|University|College|Institute|Foundation|Ministry|Department|"
     r"Agency|Authority|Organization|Organisation|Group|Ventures|Enterprises|Solutions))\b"

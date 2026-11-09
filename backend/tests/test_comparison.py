@@ -73,7 +73,7 @@ def test_compare_detects_shared_person(client: TestClient) -> None:
     assert any("john smith" in item["normalized_value"] for item in people)
     assert people[0]["document_count"] == 2
     assert all(occ["document_id"] in {id_a, id_b} for occ in people[0]["occurrences"])
-    assert report["method"] == "exact_normalized_matching"
+    assert report["method"] == "exact_normalized_matching+fuzzy_name_matching"
     assert "not proof of fraud" in report["disclaimer"]
 
 
