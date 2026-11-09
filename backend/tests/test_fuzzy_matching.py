@@ -42,8 +42,9 @@ def test_fuzzy_organization_match_is_reported(client: TestClient) -> None:
     entry = fuzzy[0]
     assert entry["entity_type"] == "organization"
     assert entry["similarity"] >= 0.80
-    assert "Global Trade" in entry["value"]
-    assert "Global Trading" in entry["fuzzy_variant"]
+    pair = {entry["value"], entry["fuzzy_variant"]}
+    assert any("Global Trade Holdings" in name for name in pair), pair
+    assert any("Global Trading Holdings" in name for name in pair), pair
     assert "human review" in entry["explanation"]
     assert entry["document_count"] == 2
     assert body["summary"]["fuzzy_match_count"] >= 1

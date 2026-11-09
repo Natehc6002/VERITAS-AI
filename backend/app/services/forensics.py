@@ -11,7 +11,14 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+from PIL import ExifTags, Image
+
+from app.core.config import get_settings
+
 SEVERITY_ORDER = ("info", "low", "medium", "high")
+
+_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png"}
+_EXIF_OFFSET_TAGS = {"ExifOffset", "GPSInfo"}
 
 _IDENTIFIER_LABEL_RE = re.compile(
     r"\b(invoice|bill|receipt|po|purchase order|ref|reference|order|policy|account)"
@@ -37,6 +44,18 @@ def _parse_pdf_date(raw: str | None) -> datetime | None:
         return datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
     except ValueError:
         return None
+
+
+def _parse_exif_date(raw: str | None) -> datetime | None:
+    """Parse EXIF timestamps such as ``2024:01:01 12:00:00``."""
+    if not raw:
+        return None
+    for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(raw.strip(), fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
 
 
 def _finding(
@@ -70,6 +89,129 @@ def _metadata(document: Any) -> dict[str, Any]:
     return {}
 
 
+def _image_exif(document: Any) -> dict[str, str]:
+    """Read scalar EXIF tags from a stored image; {} when absent/unreadable."""
+    if document.file_extension.lower() not in _IMAGE_EXTENSIONS:
+        return {}
+    try:
+        path = get_settings().upload_dir / document.stored_filename
+        if not path.exists():
+            return {}
+        with Image.open(path) as img:
+            exif = img.getexif()
+            if not exif:
+                return {}
+            names = dict(ExifTags.TAGS)
+            values: dict[str, str] = {}
+            for tag_id, raw in exif.items():
+                name = names.get(tag_id, str(tag_id))
+                if name in _EXIF_OFFSET_TAGS:
+                    continue
+                if isinstance(raw, bytes):
+                    raw = raw.decode("utf-8", "ignore")
+                if isinstance(raw, (dict, list, tuple)):
+                    continue
+                values[name] = str(raw)
+            return values
+    except Exception:
+        return {}
+
+
+def _image_findings(document: Any) -> list[dict[str, Any]]:
+    if document.file_extension.lower() not in _IMAGE_EXTENSIONS:
+        return []
+
+    exif = _image_exif(document)
+    if not exif:
+        return [
+            _finding(
+                category="missing_metadata",
+                severity="info",
+                title="Image contains no EXIF metadata",
+                explanation=(
+                    "The image carries no EXIF metadata, so capture device, software "
+                    "and timestamp provenance cannot be verified from the file itself. "
+                    "Screenshots and re-encoded images commonly strip EXIF; this is a "
+                    "completeness observation, not evidence of tampering."
+                ),
+                detection_method="image_exif_field_presence",
+                confidence=1.0,
+                evidence=[
+                    {
+                        "evidence_type": "metadata",
+                        "source_ref": "image_exif",
+                        "excerpt": "(empty)",
+                        "explanation": "No EXIF tags were readable from the image.",
+                        "page_number": None,
+                    }
+                ],
+            )
+        ]
+
+    preview = ", ".join(f"{name}={value}" for name, value in list(exif.items())[:5])
+    findings = [
+        _finding(
+            category="exif_metadata_present",
+            severity="info",
+            title="Image contains EXIF metadata",
+            explanation=(
+                f"The image carries EXIF metadata that can be reviewed for provenance: "
+                f"{preview}. These values are self-reported by the file and can be "
+                "edited, so they are investigative leads, not proof."
+            ),
+            detection_method="image_exif_field_read",
+            confidence=1.0,
+            evidence=[
+                {
+                    "evidence_type": "metadata",
+                    "source_ref": f"image_exif.{name}",
+                    "excerpt": value,
+                    "explanation": f"EXIF tag '{name}'.",
+                    "page_number": None,
+                }
+                for name, value in list(exif.items())[:12]
+            ],
+        )
+    ]
+
+    date_key = next(
+        (
+            key
+            for key in ("DateTime", "DateTimeOriginal", "DateTimeDigitized")
+            if exif.get(key)
+        ),
+        None,
+    )
+    moment = _parse_exif_date(exif.get(date_key) if date_key else None)
+    now = datetime.now(timezone.utc)
+    if moment and moment > now.replace(year=now.year + _FUTURE_YEARS_AHEAD):
+        findings.append(
+            _finding(
+                category="timestamp_anomaly",
+                severity="low",
+                title="EXIF timestamp is in the future",
+                explanation=(
+                    f"The image reports an EXIF timestamp of {moment.isoformat()}, "
+                    "which is later than the current date. This is unusual for a "
+                    "capture made in the past and should be reviewed in context."
+                ),
+                detection_method="image_exif_future_date_check",
+                confidence=0.9,
+                evidence=[
+                    {
+                        "evidence_type": "metadata",
+                        "source_ref": f"image_exif.{date_key}",
+                        "excerpt": exif.get(date_key),
+                        "explanation": "EXIF timestamp later than the current date.",
+                        "page_number": None,
+                    }
+                ],
+            )
+        )
+
+    return findings
+
+
 def analyze_document(
     document: Any,
     extraction: Any | None,
@@ -80,6 +222,7 @@ def analyze_document(
     meta = _metadata(document) if document.file_extension == "pdf" else {}
 
     findings.extend(_metadata_findings(document, meta))
+    findings.extend(_image_findings(document))
     findings.extend(_content_findings(document, extraction, meta))
     findings.extend(_identifier_findings(extraction))
     if duplicate_of is not None:
