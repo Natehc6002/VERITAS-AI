@@ -6,6 +6,19 @@ Schema: `/openapi.json`
 All payloads are JSON unless noted. Errors use `{"detail": "<message>"}` with the appropriate
 status code (`400`, `404`, `413`, `415`, `422`, `500`).
 
+> **Note (auth layer):** since v1.2.0 every endpoint below — except `GET /api/v1/health`,
+> `POST /api/v1/auth/register` and `POST /api/v1/auth/login` — requires an
+> `Authorization: Bearer <token>` header (`401` otherwise) and is scoped to the signed-in
+> owner (`404` for foreign resources). Additional route groups:
+>
+> - **Auth:** `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`
+> - **Investigations:** `GET|POST /api/v1/investigations`, `GET|PATCH|DELETE /api/v1/investigations/{id}`,
+>   `GET /api/v1/investigations/{id}/report` (PDF download)
+> - Upload accepts an optional `investigation_id` form field; document responses include
+>   `investigation_id`.
+>
+> The live OpenAPI schema at `/openapi.json` is the authoritative reference.
+
 ---
 
 ## Health

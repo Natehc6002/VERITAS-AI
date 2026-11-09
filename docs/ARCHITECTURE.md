@@ -105,4 +105,7 @@ compare ─▶ ensure each document analysed ─▶ normalise entities ─▶ ex
 
 - Extraction/analysis run synchronously in the request thread (files ≤ 20 MB).
 - SQLite with `check_same_thread=False` and short-lived sessions per request.
-- No auth, no multi-tenancy, no queue, no external model APIs.
+- Authentication and owner-scoped multi-user isolation are implemented (register/login,
+  bearer tokens, every data endpoint owner-checked with 404 on foreign access); there are
+  no sharing/roles and no organisation layer.
+- No queue, no external model APIs.
